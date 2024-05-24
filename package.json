@@ -4,7 +4,8 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "gcloud builds submit --tag gcr.io/amplified-coder-421414/youtube-comments-backend && gcloud run deploy youtube-comments-backend --image gcr.io/amplified-coder-421414/youtube-comments-backend --platform managed --region us-central1 --allow-unauthenticated"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -61,27 +61,63 @@ app.get("/auth/google/callback", async (req, res) => {
   }
 });
 
+const fetchAllComments = async (youtube, videoId, maxResults, pageToken = "", totalComments = []) => {
+  try {
+    const response = await youtube.commentThreads.list({
+      part: "snippet,replies",
+      videoId,
+      pageToken,
+      maxResults: Math.min(maxResults, 100), // Fetch up to 100 comments per request
+    });
+
+    let comments = response.data.items;
+    totalComments = totalComments.concat(comments);
+
+    // If we have fetched enough comments, return them
+    if (totalComments.length >= maxResults) {
+      return totalComments.slice(0, maxResults);
+    }
+
+    // If there's a next page and we haven't fetched enough comments, fetch the next page
+    if (response.data.nextPageToken) {
+      const nextPageComments = await fetchAllComments(youtube, videoId, maxResults, response.data.nextPageToken, totalComments);
+      return nextPageComments;
+    }
+
+    // Return the accumulated comments
+    return totalComments;
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    if (error.response && error.response.data) {
+      console.error("Error details:", error.response.data);
+      if (error.response.data.error && error.response.data.error.code === 404) {
+        throw new Error("Video not found");
+      }
+    }
+    throw error;
+  }
+};
+
 app.post("/youtube/comments", async (req, res) => {
   console.log("POST /youtube/comments called");
-  const { videoId, accessToken } = req.body;
+  const { videoId, accessToken, maxResults } = req.body;
   console.log("Received videoId:", videoId);
   console.log("Received accessToken:", accessToken);
+  console.log("Received maxResults:", maxResults);
   oauth2Client.setCredentials({ access_token: accessToken });
 
   try {
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-    const response = await youtube.commentThreads.list({
-      part: "snippet,replies",
-      videoId,
-    });
-    console.log("Comment threads fetched successfully");
-    res.json(response.data.items);
+    const allComments = await fetchAllComments(youtube, videoId, maxResults);
+    console.log("All comment threads fetched successfully");
+    res.json(allComments);
   } catch (error) {
-    console.error("Error fetching comment threads:", error);
-    if (error.response && error.response.data) {
-      console.error("Error details:", error.response.data);
+    console.error("Error fetching comment threads:", error.message);
+    if (error.message === "Video not found") {
+      res.status(404).send("Video not found");
+    } else {
+      res.status(500).send("Failed to fetch comment threads");
     }
-    res.status(500).send("Failed to fetch comment threads");
   }
 });
 
